@@ -1,4 +1,5 @@
 import Std.Data.Sum.Basic
+import Std.Data.Sum.Lemmas
 
 /-!
 This file defines the `CoroutineM` monad.
@@ -34,10 +35,12 @@ def map {α β : Type u} (f : α → β) (x : CoroutineM α) : CoroutineM β whe
   state  := x.state
   next s := x.next s |>.map id f
 
+instance : Functor (CoroutineM) := {map}
+
 /-- `bind x f`, composes two state machines together, by running `f` after `x` completes,
 where the second state machine, `f`, may depend on the result of `x`  -/
 def bind {α β : Type u} (x : CoroutineM α) (f : α → CoroutineM β) : CoroutineM β where
-  σ := x.σ ⊕ Σ (a : α), (f a).σ × ((f a).σ → (f a).σ ⊕ β)
+  σ := x.σ ⊕ Σ (a : α), let σ' := (f a).σ; σ' × (σ' → σ' ⊕ β)
   -- /-^^^---^^^^^^^^^^^^^^^^^^
   -- | The state of `bind x f` is the sum of states of `x` and `f`
   -- | However, `f` is a *function*, not a straight state machine,
@@ -58,10 +61,26 @@ def bind {α β : Type u} (x : CoroutineM α) (f : α → CoroutineM β) : Corou
     -- ^^^^^^^^^^ Finally, run `f` until completion, mapping its state into
     --            the combined sum state each step
 
-
 instance : Monad (CoroutineM) where
   pure := pure
   bind := bind
+
+section Lemmas
+
+@[simp] theorem map_id (x : CoroutineM α) : x.map id = x := by
+  simp [Functor.map, map]
+
+theorem map_comp (f : α → β) (g : β → γ) (x : CoroutineM α) :
+    x.map (g ∘ f) = (x.map f).map g := by
+  simp [Functor.map, map]; rfl
+
+instance : LawfulFunctor (CoroutineM) where
+  map_const := by simp [Functor.mapConst, Functor.map]
+  id_map    := map_id
+  comp_map  := map_comp
+
+
+end Lemmas
 
 
 end CoroutineM

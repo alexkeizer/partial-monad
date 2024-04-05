@@ -1,4 +1,5 @@
 import PartialMonad.CoroutineM
+import PartialMonad.CoroutineM.Bisim
 
 /-!
 # Extracting Values From Coroutines
@@ -10,11 +11,26 @@ import PartialMonad.CoroutineM
 
 namespace CoroutineM
 
+/-- `x.iterate n` runs the coroutine for `n` steps -/
 def iterate (x : CoroutineM α) : Nat → CoroutineM α ⊕ α
   | 0   => .inl x
   | n+1 => match x.nextState with
       | .inl x' => x'.iterate n
       | .inr a  => .inr a
+
+theorem iterate_succ (x : CoroutineM α) (n : Nat) :
+    x.iterate (n+1) = match (x.iterate n) with
+      | .inl x => x.nextState
+      | .inr a => .inr a := by
+  induction n generalizing x
+  case zero =>
+    simp only [iterate]
+    cases x.nextState <;> rfl
+  case succ n ih =>
+    rw [iterate]
+    cases hx : x.nextState
+    · simp only; rw [ih, iterate, hx]
+    · simp [iterate, hx]
 
 def Terminates (x : CoroutineM α) : Prop :=
   ∃ n, (x.iterate n).isRight
@@ -66,5 +82,19 @@ def getOfTerminates (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
     | .inr a => a
 termination_by x.minimumStepsToTerminate h_terminates
 
+theorem iterate_bisim_of_bisim {x y : CoroutineM α}
+
+theorem getOfTerminates_eq_of_bisim {x y : CoroutineM α} (x_bisim_y : x ≈ y)
+    (x_terminates : x.Terminates) (y_terminates : y.Terminates) :
+    x.getOfTerminates x_terminates = y.getOfTerminates y_terminates := by
+  unfold getOfTerminates nextState
+  rcases x_bisim_y with ⟨R, is_bisim, state⟩
+  have := is_bisim _ _ state
+  stop
+  split <;> split <;> (try simp_all)
+
+theorem terminates_of_bisim {x y : CoroutineM α} (x_bisim_y : x ≈ y) :
+    x.Terminates → y.Terminates := by
+  rintro ⟨n, h⟩
 
 end CoroutineM
