@@ -1,6 +1,6 @@
 import PartialMonad.CoroutineM
 import PartialMonad.CoroutineM.Bisim
-import PartialMonad.CoroutineM.Get
+import PartialMonad.CoroutineM.Run
 
 import Mathlib.Data.Quot
 

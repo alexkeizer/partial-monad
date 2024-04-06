@@ -1,4 +1,4 @@
-import PartialMonad.CoroutineM.Get
+import PartialMonad.CoroutineM.Run
 import PartialMonad.LawfulCoroutineM
 
 namespace CoroutineM
