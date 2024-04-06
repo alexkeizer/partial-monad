@@ -30,6 +30,8 @@ def pure (a : α) : CoroutineM α where
   state := ()
   next _ := .inr a
 
+instance : Pure (CoroutineM) := {pure}
+
 /-- `map f x` applies a pure function `f : α → β` to the final result of state machine `x`,
 after it has completed. -/
 def map {α β : Type u} (f : α → β) (x : CoroutineM α) : CoroutineM β where
@@ -38,50 +40,32 @@ def map {α β : Type u} (f : α → β) (x : CoroutineM α) : CoroutineM β whe
 
 instance : Functor (CoroutineM) := {map}
 
-/-- `bind x f`, composes two state machines together, by running `f` after `x` completes,
-where the second state machine, `f`, may depend on the result of `x`  -/
-def bind {α β : Type u} (x : CoroutineM α) (f : α → CoroutineM β) : CoroutineM β where
-  σ := x.σ ⊕ Σ (a : α), let σ' := (f a).σ; σ' × (σ' → σ' ⊕ β)
-  -- /-^^^---^^^^^^^^^^^^^^^^^^
-  -- | The state of `bind x f` is the sum of states of `x` and `f`
-  -- | However, `f` is a *function*, not a straight state machine,
-  -- | so read "the states of `f`" as:
-  -- |   "the infinite sum of all state types `(f x').σ`, for all possible values `a : α`"
-  state := .inl x.state
-  next := fun
-    | .inl (s : x.σ) =>
-      .inl <| (x.next s).map id (fun a => ⟨_, (f a).state, (f a).next⟩)
-        --  /----------------^^-----------^^^^^^^^^^^^^^^^^^^^^^^^^^^
-        --  | If `x` is still going, step into the next state of `x`,
-        --  |
-        --  | Otherwise, if `x` has completed, and yielded some value `a`,
-        --  | step into the first state of `f` that corresponds to `a`.
-        --  | Additionally, we store the transition function, so that we don't have to recompute it
-        --  | at every step
-    | .inr ⟨a, s, next⟩ => (next s).map (.inr ⟨a, ·, next⟩) id
-    -- ^^^^^^^^^^ Finally, run `f` until completion, mapping its state into
-    --            the combined sum state each step
+-- def bind {α β : Type u} (x : CoroutineM α) (f : α → CoroutineM β) : CoroutineM β where
+--   σ := x.σ ⊕ Σ (a : α), let σ' := (f a).σ; σ' × (σ' → σ' ⊕ β)
+--   -- /-^^^---^^^^^^^^^^^^^^^^^^
+--   -- | The state of `bind x f` is the sum of states of `x` and `f`
+--   -- | However, `f` is a *function*, not a straight state machine,
+--   -- | so read "the states of `f`" as:
+--   -- |   "the infinite sum of all state types `(f x').σ`, for all possible values `a : α`"
+--   state := .inl x.state
+--   next := fun
+--     | .inl (s : x.σ) =>
+--       .inl <| (x.next s).map id (fun a => ⟨_, (f a).state, (f a).next⟩)
+--         --  /----------------^^-----------^^^^^^^^^^^^^^^^^^^^^^^^^^^
+--         --  | If `x` is still going, step into the next state of `x`,
+--         --  |
+--         --  | Otherwise, if `x` has completed, and yielded some value `a`,
+--         --  | step into the first state of `f` that corresponds to `a`.
+--         --  | Additionally, we store the transition function, so that we don't have to recompute it
+--         --  | at every step
+--     | .inr ⟨a, s, next⟩ => (next s).map (.inr ⟨a, ·, next⟩) id
+--     -- ^^^^^^^^^^ Finally, run `f` until completion, mapping its state into
+--     --            the combined sum state each step
 
-instance : Monad (CoroutineM) where
-  pure := pure
-  bind := bind
+-- instance : Monad (CoroutineM) where
+--   pure := pure
+--   bind := bind
 
-section Lemmas
-
-@[simp] theorem map_id (x : CoroutineM α) : x.map id = x := by
-  simp only [map]; congr; simp
-
-theorem map_comp (f : α → β) (g : β → γ) (x : CoroutineM α) :
-    x.map (g ∘ f) = (x.map f).map g := by
-  simp [Functor.map, map]; rfl
-
-instance : LawfulFunctor (CoroutineM) where
-  map_const := by simp [Functor.mapConst, Functor.map]
-  id_map    := map_id
-  comp_map  := map_comp
-
-
-end Lemmas
 
 
 end CoroutineM

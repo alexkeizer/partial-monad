@@ -47,6 +47,8 @@ instance : Trans (@HasEquiv.Equiv (CoroutineM α) _) (HasEquiv.Equiv) (HasEquiv.
 
 end Equivalence
 
+#exit
+
 /-- If a coroutine `x` terminates, yielding some value `a`, then `x` is equivalent to `pure a` -/
 theorem pure_run_equiv (x : CoroutineM α) (h : x.Terminates) :
     pure (x.run h) ≈ x := by
