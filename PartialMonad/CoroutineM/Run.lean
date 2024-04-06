@@ -26,7 +26,7 @@ theorem iterate_succ (x : CoroutineM α) (n : Nat) :
     x.iterate (n+1) = match (x.iterate n) with
       | .inl s => x.next s
       | .inr a => .inr a := by
-  rw [show x = ⟨x.next, x.state⟩ from rfl]; simp only
+  rw [show x = ⟨⟨x.next⟩, x.state⟩ from rfl]; simp only
   generalize x.state = state
   induction n generalizing state
   case zero =>
@@ -37,7 +37,7 @@ theorem iterate_succ (x : CoroutineM α) (n : Nat) :
     cases hx : x.next state
     case inl state' =>
       simp only; rw [ih state', iterate, hx]; simp only
-      cases (iterate ⟨x.next, state'⟩ n) <;> rfl
+      cases (iterate ⟨⟨x.next⟩, state'⟩ n) <;> rfl
     case inr _ =>
       simp [iterate, hx]
 
@@ -158,14 +158,14 @@ theorem minimumStepsToTerminate_eq_succ_of_next {x : CoroutineM α} {state' : x.
     simp only [Nat.pred_succ, iterate_succ_of_next_eq_inl h_eq] at *
     have := iterate_isLeft_of_add _ isLeft_pred_n'
     revert this isRight_iterate_x_n
-    cases iterate ⟨x.next, state'⟩ n <;> simp
+    cases iterate ⟨⟨x.next⟩, state'⟩ n <;> simp
   · exfalso
     obtain ⟨m, rfl⟩ := Nat.exists_eq_add_of_lt gt
     have : n' + 1 + m = (n' + m) + 1 := by omega
     simp only [Nat.pred_succ, this, iterate_succ_of_next_eq_inl h_eq] at *
     have := iterate_isLeft_of_add _ isLeft_pred_n
     revert this isRight_iterate_x'_n'
-    cases iterate ⟨x.next, state'⟩ n' <;> simp
+    cases iterate ⟨⟨x.next⟩, state'⟩ n' <;> simp
 
 /-- We can soundly run a coroutine until completion, given a proof that it will terminate in finite
 time -/

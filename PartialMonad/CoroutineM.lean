@@ -10,12 +10,13 @@ which means different computations resulting in the same final value are not nec
 In particular, this monad is *not* an instance of `LawfulMonad`.
 
 For a lawful, but more complicated version, see `LawfulCoroutineM`
-
 -/
 
-structure CoroutineM (α : Type u) : Type (u+1) where
+structure CoroutineM.StateMachine (α : Type u) : Type (u+1) where
   {σ : Type u}
   (next : σ → σ ⊕ α)
+
+structure CoroutineM (α : Type u) extends CoroutineM.StateMachine α where
   (state : σ)
 
 namespace CoroutineM
@@ -68,7 +69,7 @@ instance : Monad (CoroutineM) where
 section Lemmas
 
 @[simp] theorem map_id (x : CoroutineM α) : x.map id = x := by
-  simp [Functor.map, map]
+  simp only [map]; congr; simp
 
 theorem map_comp (f : α → β) (g : β → γ) (x : CoroutineM α) :
     x.map (g ∘ f) = (x.map f).map g := by

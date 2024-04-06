@@ -98,7 +98,7 @@ def bind {α β : Type u} (x : LawfulCoroutineM α) (f : α → LawfulCoroutineM
         <;> rintro ⟨bisim_next'⟩
         <;> constructor
         · simp only [Sum.liftRel_inr_inr]
-          exact (⟨R', bisim', bisim_next'⟩ : Bisim ⟨next₁, s₁'⟩ ⟨next₂, s₂'⟩)
+          exact (⟨R', bisim', bisim_next'⟩ : Bisim ⟨⟨next₁⟩, s₁'⟩ ⟨⟨next₂⟩, s₂'⟩)
     · simpa [CoroutineM.bind] using state
 
 #print axioms bind -- no `sorry`, yay!
