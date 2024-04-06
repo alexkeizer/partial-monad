@@ -81,8 +81,8 @@ theorem terminates_of_equiv {x y : CoroutineM α} (h_eqv : x ≈ y) :
 
 theorem iterate_bind_isLeft_of {x : CoroutineM α} {n} (h : (x.iterate n).isLeft)
     (f : α → CoroutineM β) : (iterate (x >>= f) n).isLeft := by
-  simp only [show (x >>= f) = {(x >>= f) with state := .inl x.state} from _root_.rfl]
-  simp only [show x = {x with state := x.state} from _root_.rfl] at h
+  rw [show (x >>= f) = {(x >>= f) with state := .inl x.state} from _root_.rfl]
+  rw [show x = {x with state := x.state} from _root_.rfl] at h
   generalize x.state = state at *
   induction n generalizing state
   case zero       => rfl
@@ -91,8 +91,7 @@ theorem iterate_bind_isLeft_of {x : CoroutineM α} {n} (h : (x.iterate n).isLeft
 theorem bind_iterate_minimumStepsToTerminate_x {x : CoroutineM α} (h : x.Terminates)
     (f : α → CoroutineM β) :
     (x >>= f).iterate (x.minimumStepsToTerminate h)
-    = let a := x.run h
-      .inl {(x >>= f) with state := .inr ⟨a, (f a).state, (f a).next⟩} := by
+    = .inl (.inr ⟨x.run h, (f _).state, (f _).next⟩) := by
   simp only
   sorry
 
@@ -112,11 +111,11 @@ theorem non_terminates_of_cycle (x : CoroutineM α) (S : Set x.σ)
     (h_closed : ∀ s ∈ S, ∃ s' ∈ S, x.next s = .inl s') :
     ¬x.Terminates := by
   intro h_terminates
-  have iterate_mem_S : ∀ n, ∃ state ∈ S, x.iterate n = .inl {x with state} := by
+  have iterate_mem_S : ∀ n, ∃ state ∈ S, x.iterate n = .inl state := by
     intro n
     induction n
     case zero =>
-      simp; exact Exists.intro x.state ⟨h_state, _root_.rfl⟩
+      simp [h_state]
     case succ n ih =>
       rcases ih with ⟨s, s_mem_S, hs⟩
       rcases h_closed _ s_mem_S with ⟨s', s'_mem, hs'⟩
@@ -130,8 +129,8 @@ theorem non_terminates_of_cycle (x : CoroutineM α) (S : Set x.σ)
 --   ∃ S, x.state ∈ S ∧ (∀ s ∈ S, ∃ s' ∈ S, x.next s = .inl s')
 
 theorem nextState_isLeft_of_iterate_succ_isLeft {x : CoroutineM α} :
-    (x.iterate (n+1)).isLeft → x.nextState.isLeft := by
-  unfold iterate; cases x.nextState <;> simp
+    (x.iterate (n+1)).isLeft → (x.next x.state).isLeft := by
+  unfold iterate; cases x.next x.state <;> simp
 
 -- @[simp] theorem nextState_bind (x : CoroutineM α) (f : α → CoroutineM β) :
 --     nextState (x >>= f) = match nextState x with

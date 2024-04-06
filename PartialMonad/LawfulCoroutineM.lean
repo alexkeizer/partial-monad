@@ -126,14 +126,18 @@ instance : LawfulFunctor (LawfulCoroutineM) where
 
 end LawfulFunctor
 
-section toOption
+-- section toOption
 
-noncomputable def toOption (x : LawfulCoroutineM α) : Option α :=
-  if h : x.Terminates then
-    .some x.run h
-  else
-    .none
+-- def Terminates : LawfulCoroutineM.
 
-end toOption
+-- noncomputable def toOption (x : LawfulCoroutineM α) : Option α :=
+--   match Classical.em x.Terminates with
+--     | _ => _
+--   -- if h : x.Terminates then
+--   --   .some x.run h
+--   -- else
+--   --   .none
+
+-- end toOption
 
 end LawfulCoroutineM

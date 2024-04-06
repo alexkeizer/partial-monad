@@ -15,29 +15,35 @@ namespace CoroutineM
 --       instead of the whole `CoroutineM`
 
 /-- `x.iterate n` runs the coroutine for `n` steps -/
-def iterate (x : CoroutineM α) : Nat → CoroutineM α ⊕ α
-  | 0   => .inl x
-  | n+1 => match x.nextState with
-      | .inl x' => x'.iterate n
-      | .inr a  => .inr a
+def iterate (x : CoroutineM α) : Nat → x.σ ⊕ α
+  | 0   => .inl x.state
+  | n+1 => match x.next x.state with
+      | .inl state => iterate {x with state} n
+      | .inr a     => .inr a
 
-@[simp] theorem iterate_zero (x : CoroutineM α) : x.iterate 0 = .inl x := rfl
+@[simp] theorem iterate_zero (x : CoroutineM α) : x.iterate 0 = .inl x.state := rfl
 theorem iterate_succ (x : CoroutineM α) (n : Nat) :
     x.iterate (n+1) = match (x.iterate n) with
-      | .inl x => x.nextState
+      | .inl s => x.next s
       | .inr a => .inr a := by
-  induction n generalizing x
+  rw [show x = ⟨x.next, x.state⟩ from rfl]; simp only
+  generalize x.state = state
+  induction n generalizing state
   case zero =>
-    simp only [iterate]
-    cases x.nextState <;> rfl
+    simp only [iterate]; cases x.next state <;> rfl
   case succ n ih =>
     rw [iterate]
-    cases hx : x.nextState
-    · simp only; rw [ih, iterate, hx]
-    · simp [iterate, hx]
+    simp
+    cases hx : x.next state
+    case inl state' =>
+      simp only; rw [ih state', iterate, hx]; simp only
+      cases (iterate ⟨x.next, state'⟩ n) <;> rfl
+    case inr _ =>
+      simp [iterate, hx]
 
-theorem iterate_succ_of_nextState_eq_inl {x : CoroutineM α} (h : x.nextState = .inl y) :
-    x.iterate (n+1) = y.iterate n := by
+theorem iterate_succ_of_next_eq_inl {x : CoroutineM α} {state'}
+    (h : x.next x.state = .inl state') :
+    x.iterate (n+1) = {x with state := state'}.iterate n := by
   rw [iterate, h]
 
 def Terminates (x : CoroutineM α) : Prop :=
@@ -126,16 +132,19 @@ theorem iterate_isLeft_of_le_minimumStepToTerminate {x : CoroutineM α} {h : x.T
 
 /-- If `x'` is the successor state of `x`, then we know that `x` takes exactly one more step to
 terminate than `x'` -/
-theorem minimumStepsToTerminate_eq_succ_of_nextState {x x' : CoroutineM α}
-      (h_eq : x.nextState = .inl x') (h_terminates : x.Terminates) (h_terminates' : x'.Terminates) :
-    x.minimumStepsToTerminate h_terminates = x'.minimumStepsToTerminate h_terminates' + 1 := by
+theorem minimumStepsToTerminate_eq_succ_of_next {x : CoroutineM α} {state' : x.σ}
+      (h_eq : x.next x.state = .inl state')
+      (h_terminates : x.Terminates) (h_terminates' : {x with state := state'}.Terminates) :
+    x.minimumStepsToTerminate h_terminates
+    = {x with state := state'}.minimumStepsToTerminate h_terminates' + 1 := by
   have isLeft_pred_n := iterate_minimumStepsToTerminate_pred x h_terminates
   have isRight_iterate_x_n := iterate_minimumStepsToTerminate x h_terminates
-  generalize x.minimumStepsToTerminate h_terminates = n at *
+  generalize h : x.minimumStepsToTerminate h_terminates = n at *
 
-  have isLeft_pred_n' := iterate_minimumStepsToTerminate_pred x' h_terminates'
-  have isRight_iterate_x'_n' := iterate_minimumStepsToTerminate x' h_terminates'
-  generalize x'.minimumStepsToTerminate h_terminates' = n' at *
+
+  have isLeft_pred_n' := iterate_minimumStepsToTerminate_pred _ h_terminates'
+  have isRight_iterate_x'_n' := iterate_minimumStepsToTerminate _ h_terminates'
+  generalize CoroutineM.minimumStepsToTerminate _ h_terminates' = n' at *
 
   cases n
   case zero => simp_all
@@ -146,24 +155,25 @@ theorem minimumStepsToTerminate_eq_succ_of_nextState {x x' : CoroutineM α}
   case inr.inl => exact eq
   · exfalso
     obtain ⟨m, rfl⟩ := Nat.exists_eq_add_of_lt lt
-    simp only [Nat.pred_succ, iterate_succ_of_nextState_eq_inl h_eq] at *
+    simp only [Nat.pred_succ, iterate_succ_of_next_eq_inl h_eq] at *
     have := iterate_isLeft_of_add _ isLeft_pred_n'
     revert this isRight_iterate_x_n
-    cases iterate x' n <;> simp
+    cases iterate ⟨x.next, state'⟩ n <;> simp
   · exfalso
     obtain ⟨m, rfl⟩ := Nat.exists_eq_add_of_lt gt
     have : n' + 1 + m = (n' + m) + 1 := by omega
-    simp only [Nat.pred_succ, this, iterate_succ_of_nextState_eq_inl h_eq] at *
+    simp only [Nat.pred_succ, this, iterate_succ_of_next_eq_inl h_eq] at *
     have := iterate_isLeft_of_add _ isLeft_pred_n
     revert this isRight_iterate_x'_n'
-    cases iterate x' n' <;> simp
+    cases iterate ⟨x.next, state'⟩ n' <;> simp
 
 /-- We can soundly run a coroutine until completion, given a proof that it will terminate in finite
 time -/
 def run (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
-  match h_nextState : x.nextState with
-    | .inl x' =>
-        have h_terminates' := by
+  match h_nextState : x.next x.state with
+    | .inl state' =>
+        let x' := {x with state := state'}
+        have h_terminates' : x'.Terminates := by
           rcases h_terminates with ⟨n, h⟩
           cases n
           case zero =>
@@ -171,9 +181,9 @@ def run (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
           case succ n =>
             simp [iterate, h_nextState] at h
             exact ⟨_, h⟩
-        have :  x'.minimumStepsToTerminate h_terminates'
+        have : x'.minimumStepsToTerminate h_terminates'
                 < x.minimumStepsToTerminate h_terminates := by
-          simp [minimumStepsToTerminate_eq_succ_of_nextState h_nextState h_terminates h_terminates']
+          simp [minimumStepsToTerminate_eq_succ_of_next h_nextState h_terminates h_terminates']
         x'.run h_terminates'
 
     | .inr a => a
@@ -185,10 +195,11 @@ termination_by x.minimumStepsToTerminate h_terminates
 section Terminates
 
 @[simp] theorem pure_terminates (a : α) : (pure a).Terminates := ⟨1, by rfl⟩
+@[simp] theorem next_pure (a : α) (s) : (pure a).next s = .inr a := rfl
 @[simp] theorem nextState_pure (a : α) : nextState (pure a) = .inr a := rfl
 @[simp] theorem run_pure (a : α) (h : (pure a).Terminates := pure_terminates a) :
     run (pure a) h = a := by
-  simp [run]
+  unfold run; rfl
 
 end Terminates
 
@@ -197,7 +208,7 @@ section Reachable
 
 /-- `x.ReachableStates` is the set of all states that are reachable from the initial state of `x` -/
 def ReachableStates (x : CoroutineM α) : Set x.σ :=
-  { state | ∃ i, x.iterate i = .inl {x with state} }
+  { state | ∃ i, x.iterate i = .inl state }
 
 @[simp] theorem state_mem_reachable (x : CoroutineM α) : x.state ∈ x.ReachableStates :=
   Exists.intro 0 rfl
