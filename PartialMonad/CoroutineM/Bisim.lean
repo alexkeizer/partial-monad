@@ -3,6 +3,15 @@ import PartialMonad.CoroutineM
 /-!
 This file establishes a notion of bisimilarity on `CoroutineM`, and shows that is an equivalence
 relation
+
+> [!WARNING]
+> This file is flawed: `Bisim` does **not** treat the computation steps as internal, instead
+> it only treats computations that complete in the same number of steps as equal.
+> This is not what we want.
+>
+> Although, by carefully making sure we never add computation steps, we might still be able to
+> make this lawful? Regardless, I'm exploring an alternative equivalence in `Equiv` now.
+
 -/
 
 namespace CoroutineM

@@ -1,4 +1,5 @@
 import PartialMonad.CoroutineM
+import Mathlib.Data.Set.Basic
 
 /-!
 # Extracting Values From Coroutines
@@ -9,6 +10,9 @@ import PartialMonad.CoroutineM
 -/
 
 namespace CoroutineM
+
+-- TODO: probbaly we want `iterate` and `nextState` to return just the state (`x.σ`),
+--       instead of the whole `CoroutineM`
 
 /-- `x.iterate n` runs the coroutine for `n` steps -/
 def iterate (x : CoroutineM α) : Nat → CoroutineM α ⊕ α
@@ -176,5 +180,28 @@ def run (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
 termination_by x.minimumStepsToTerminate h_terminates
 
 #print axioms run -- `sorry`-free, yay!
+
+/-! Show that various constructions terminate (assuming that it's arguments terminate) -/
+section Terminates
+
+@[simp] theorem pure_terminates (a : α) : (pure a).Terminates := ⟨1, by rfl⟩
+@[simp] theorem nextState_pure (a : α) : nextState (pure a) = .inr a := rfl
+@[simp] theorem run_pure (a : α) (h : (pure a).Terminates := pure_terminates a) :
+    run (pure a) h = a := by
+  simp [run]
+
+end Terminates
+
+
+section Reachable
+
+/-- `x.ReachableStates` is the set of all states that are reachable from the initial state of `x` -/
+def ReachableStates (x : CoroutineM α) : Set x.σ :=
+  { state | ∃ i, x.iterate i = .inl {x with state} }
+
+@[simp] theorem state_mem_reachable (x : CoroutineM α) : x.state ∈ x.ReachableStates :=
+  Exists.intro 0 rfl
+
+end Reachable
 
 end CoroutineM
