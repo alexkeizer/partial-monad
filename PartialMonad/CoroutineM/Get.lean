@@ -1,5 +1,4 @@
 import PartialMonad.CoroutineM
-import PartialMonad.CoroutineM.Bisim
 
 /-!
 # Extracting Values From Coroutines
@@ -18,6 +17,7 @@ def iterate (x : CoroutineM α) : Nat → CoroutineM α ⊕ α
       | .inl x' => x'.iterate n
       | .inr a  => .inr a
 
+@[simp] theorem iterate_zero (x : CoroutineM α) : x.iterate 0 = .inl x := rfl
 theorem iterate_succ (x : CoroutineM α) (n : Nat) :
     x.iterate (n+1) = match (x.iterate n) with
       | .inl x => x.nextState
@@ -31,6 +31,10 @@ theorem iterate_succ (x : CoroutineM α) (n : Nat) :
     cases hx : x.nextState
     · simp only; rw [ih, iterate, hx]
     · simp [iterate, hx]
+
+theorem iterate_succ_of_nextState_eq_inl {x : CoroutineM α} (h : x.nextState = .inl y) :
+    x.iterate (n+1) = y.iterate n := by
+  rw [iterate, h]
 
 def Terminates (x : CoroutineM α) : Prop :=
   ∃ n, (x.iterate n).isRight
@@ -46,22 +50,109 @@ where go : Nat → Nat
     | .inr _ => go n
     --^^^^^^ `x` still terminates in `n` steps, so try to minimize further
 
-/-- If `x'` is the next state of `x`, then we know that `x` takes exactly one more step to terminate
-than `x'` -/
-theorem minimumStepsToTerminate_le_of_eq {x x' : CoroutineM α}
+theorem minimumStepsToTerminate_pos (x : CoroutineM α) (h : x.Terminates) :
+    0 < x.minimumStepsToTerminate h := by
+  unfold CoroutineM.minimumStepsToTerminate
+  have n_spec := h.choose_spec
+  generalize h.choose = n at *
+
+  induction n
+  case zero => simp at n_spec
+  case succ n ih =>
+    simp [minimumStepsToTerminate.go]
+    cases hx : x.iterate n
+    · simp
+    · apply ih
+      simp [hx]
+
+/-- Iterating for the minimum steps to terminate does in fact yield a result -/
+theorem iterate_minimumStepsToTerminate (x : CoroutineM α) (h : x.Terminates) :
+    (x.iterate <| x.minimumStepsToTerminate h).isRight := by
+  unfold CoroutineM.minimumStepsToTerminate
+  have n_spec := h.choose_spec
+  generalize h.choose = n at *
+  induction n
+  case zero => simp at n_spec
+  case succ n ih =>
+    simp [iterate_succ] at n_spec
+    simp [minimumStepsToTerminate.go]
+    cases h_iterate_n : x.iterate n
+    case inr => simpa [h_iterate_n] using ih
+    case inl => simpa [iterate_succ, h_iterate_n] using n_spec
+
+/-- Iterating one step less than the minimum will yield a still-in-progress coroutine, i.e., the
+function really does compute the *minimum* steps to terminate -/
+theorem iterate_minimumStepsToTerminate_pred (x : CoroutineM α) (h : x.Terminates) :
+    (x.iterate <| Nat.pred <| x.minimumStepsToTerminate h).isLeft := by
+  unfold CoroutineM.minimumStepsToTerminate
+  have n_spec := h.choose_spec
+  generalize h.choose = n at *
+  induction n
+  case zero => simp at n_spec
+  case succ n ih =>
+    simp [minimumStepsToTerminate.go]
+    cases hx : x.iterate n
+    · simp [hx]
+    · apply ih; simp [hx]
+
+/-- If iterating `n+m` times is not enough to complete a coroutine, then in particular `n` steps
+are not enough -/
+theorem iterate_isLeft_of_add {x : CoroutineM α} {n} (m) :
+    (x.iterate (n + m)).isLeft → (x.iterate n).isLeft := by
+  intro h
+  induction m
+  case zero => exact h
+  case succ m ih =>
+    apply ih
+    change Sum.isLeft (iterate x ((n+m) + 1)) at h
+    rw [iterate_succ] at h
+    cases hx : x.iterate (n+m)
+    · simp
+    · simp [hx] at h
+
+/-- Iterating less than the minimum will yield a still-in-progress coroutine -/
+theorem iterate_isLeft_of_le_minimumStepToTerminate {x : CoroutineM α} {h : x.Terminates} {n} :
+    (n < x.minimumStepsToTerminate h) → (x.iterate n).isLeft := by
+  intro h_lt
+  obtain ⟨k, hk⟩ := Nat.exists_eq_add_of_lt h_lt
+  apply iterate_isLeft_of_add k
+  show (x.iterate <| Nat.pred <| n+k+1).isLeft
+  rw [←hk]
+  apply iterate_minimumStepsToTerminate_pred
+
+/-- If `x'` is the successor state of `x`, then we know that `x` takes exactly one more step to
+terminate than `x'` -/
+theorem minimumStepsToTerminate_eq_succ_of_nextState {x x' : CoroutineM α}
       (h_eq : x.nextState = .inl x') (h_terminates : x.Terminates) (h_terminates' : x'.Terminates) :
     x.minimumStepsToTerminate h_terminates = x'.minimumStepsToTerminate h_terminates' + 1 := by
-  unfold CoroutineM.minimumStepsToTerminate
-  have n_spec := h_terminates.choose_spec
-  generalize h_terminates.choose = n at *
-  have n'_spec := h_terminates'.choose_spec
-  generalize h_terminates'.choose = n' at *
+  have isLeft_pred_n := iterate_minimumStepsToTerminate_pred x h_terminates
+  have isRight_iterate_x_n := iterate_minimumStepsToTerminate x h_terminates
+  generalize x.minimumStepsToTerminate h_terminates = n at *
+
+  have isLeft_pred_n' := iterate_minimumStepsToTerminate_pred x' h_terminates'
+  have isRight_iterate_x'_n' := iterate_minimumStepsToTerminate x' h_terminates'
+  generalize x'.minimumStepsToTerminate h_terminates' = n' at *
 
   cases n
-  case zero => sorry
+  case zero => simp_all
   case succ n =>
-    simp [CoroutineM.minimumStepsToTerminate.go]
-    sorry
+  simp only [Nat.succ.injEq]
+
+  rcases Nat.lt_trichotomy n n' with lt|eq|gt
+  case inr.inl => exact eq
+  · exfalso
+    obtain ⟨m, rfl⟩ := Nat.exists_eq_add_of_lt lt
+    simp only [Nat.pred_succ, iterate_succ_of_nextState_eq_inl h_eq] at *
+    have := iterate_isLeft_of_add _ isLeft_pred_n'
+    revert this isRight_iterate_x_n
+    cases iterate x' n <;> simp
+  · exfalso
+    obtain ⟨m, rfl⟩ := Nat.exists_eq_add_of_lt gt
+    have : n' + 1 + m = (n' + m) + 1 := by omega
+    simp only [Nat.pred_succ, this, iterate_succ_of_nextState_eq_inl h_eq] at *
+    have := iterate_isLeft_of_add _ isLeft_pred_n
+    revert this isRight_iterate_x'_n'
+    cases iterate x' n' <;> simp
 
 def getOfTerminates (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
   match h_nextState : x.nextState with
@@ -76,25 +167,12 @@ def getOfTerminates (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
             exact ⟨_, h⟩
         have :  x'.minimumStepsToTerminate h_terminates'
                 < x.minimumStepsToTerminate h_terminates := by
-          simp [minimumStepsToTerminate_le_of_eq h_nextState h_terminates h_terminates']
+          simp [minimumStepsToTerminate_eq_succ_of_nextState h_nextState h_terminates h_terminates']
         x'.getOfTerminates h_terminates'
 
     | .inr a => a
 termination_by x.minimumStepsToTerminate h_terminates
 
-theorem iterate_bisim_of_bisim {x y : CoroutineM α}
-
-theorem getOfTerminates_eq_of_bisim {x y : CoroutineM α} (x_bisim_y : x ≈ y)
-    (x_terminates : x.Terminates) (y_terminates : y.Terminates) :
-    x.getOfTerminates x_terminates = y.getOfTerminates y_terminates := by
-  unfold getOfTerminates nextState
-  rcases x_bisim_y with ⟨R, is_bisim, state⟩
-  have := is_bisim _ _ state
-  stop
-  split <;> split <;> (try simp_all)
-
-theorem terminates_of_bisim {x y : CoroutineM α} (x_bisim_y : x ≈ y) :
-    x.Terminates → y.Terminates := by
-  rintro ⟨n, h⟩
+#print axioms getOfTerminates
 
 end CoroutineM
