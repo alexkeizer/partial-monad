@@ -130,7 +130,7 @@ section toOption
 
 noncomputable def toOption (x : LawfulCoroutineM α) : Option α :=
   if h : x.Terminates then
-    .some x.getOfTerminates h
+    .some x.run h
   else
     .none
 

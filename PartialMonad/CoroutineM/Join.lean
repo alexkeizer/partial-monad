@@ -10,7 +10,7 @@ which is then run until completion as well -/
 def join {α : Type u} (x : CoroutineM (CoroutineM α)) : CoroutineM (ULift.{u+1} α) where
   σ := {state : x.σ // ∃ n, x.iterate n = .inl {x with state}}
        ⊕ Σ' (h : x.Terminates),
-          let σ' := (x.getOfTerminates h).σ
+          let σ' := (x.run h).σ
           σ' × (σ' → σ' ⊕ α)
   -- /-  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   -- | The state of `join x` is the sum of states of the outer state machine `x`, and
@@ -39,10 +39,10 @@ def join {α : Type u} (x : CoroutineM (CoroutineM α)) : CoroutineM (ULift.{u+1
             rcases hs with ⟨n, hs⟩
             refine ⟨n+1, ?_⟩
             simp [Terminates, iterate_succ, hs, nextState, hs']
-          have h_cast : inner.σ = (getOfTerminates x h_x_terminates).σ := by
+          have h_cast : inner.σ = (run x h_x_terminates).σ := by
             stop
             -- rw [hs'] at hs/
-            unfold getOfTerminates
+            unfold run
             split
             next => exfalso; sorry
             next h =>

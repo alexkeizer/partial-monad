@@ -4,7 +4,7 @@ import PartialMonad.CoroutineM
 # Extracting Values From Coroutines
 
 * `CoroutineM.Terminates x` holds if the coroutine `x` terminates in finite time, and
-* `CoroutineM.getOfTerminates x h`, which runs `x` until completion, given a proof `h` that this will
+* `CoroutineM.run x h`, which runs `x` until completion, given a proof `h` that this will
     happen in finite time
 -/
 
@@ -154,7 +154,9 @@ theorem minimumStepsToTerminate_eq_succ_of_nextState {x x' : CoroutineM α}
     revert this isRight_iterate_x'_n'
     cases iterate x' n' <;> simp
 
-def getOfTerminates (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
+/-- We can soundly run a coroutine until completion, given a proof that it will terminate in finite
+time -/
+def run (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
   match h_nextState : x.nextState with
     | .inl x' =>
         have h_terminates' := by
@@ -168,11 +170,11 @@ def getOfTerminates (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
         have :  x'.minimumStepsToTerminate h_terminates'
                 < x.minimumStepsToTerminate h_terminates := by
           simp [minimumStepsToTerminate_eq_succ_of_nextState h_nextState h_terminates h_terminates']
-        x'.getOfTerminates h_terminates'
+        x'.run h_terminates'
 
     | .inr a => a
 termination_by x.minimumStepsToTerminate h_terminates
 
-#print axioms getOfTerminates
+#print axioms run -- `sorry`-free, yay!
 
 end CoroutineM
