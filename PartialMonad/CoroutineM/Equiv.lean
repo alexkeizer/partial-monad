@@ -47,6 +47,77 @@ instance : Trans (@HasEquiv.Equiv (CoroutineM α) _) (HasEquiv.Equiv) (HasEquiv.
 
 end Equivalence
 
+/-! `Equiv` is a strictly weaker relation than (strong) bisimilarity -/
+section OfBisim
+
+inductive StepAgrees (R : σ₁ → σ₂ → Prop) : σ₁ ⊕ α → σ₂ ⊕ α → Prop
+  | inl {s₁ s₂} : R s₁ s₂ → StepAgrees R (.inl s₁) (.inl s₂)
+  | inr {a} : StepAgrees R (.inr a) (.inr a)
+
+def IsBisimulation {x y : CoroutineM α} (R : x.σ → y.σ → Prop) : Prop :=
+  ∀ (s₁ : x.σ) (s₂ : y.σ), R s₁ s₂ → StepAgrees R (x.next s₁) (y.next s₂)
+
+def IsBisimulation' {x y : CoroutineM α} (R : x.σ → y.σ → Prop) : Prop :=
+  ∀ (s₁ : x.σ) (s₂ : y.σ), R s₁ s₂ →
+    ∃ n m, StepAgrees R ({x with state := s₁}.iterate n) ({y with state := s₂}.iterate m)
+
+theorem iterate_agrees_of_bisim {x y : CoroutineM α}
+      {R} (h_bisim : IsBisimulation R) (h_state : R x.state y.state) :
+    ∀ n, (StepAgrees R) (x.iterate n) (y.iterate n) := by
+  intro n
+  induction n
+  case zero => exact .inl h_state
+  case succ n ih =>
+    simp [iterate_succ]
+    revert ih
+    cases iterate x n <;> cases iterate y n
+    <;> rintro ⟨hR_val⟩
+    <;> simp only
+    · apply h_bisim _ _ hR_val
+    · constructor
+
+/-!
+`iterate_of_bisim` exposes the crux of why `Bisim` is flawed: it mandates that the state machines
+agree at each iteration `n`, whereas we would like it to mean that for every `n`, there is some `m`
+so that `x.iterate n` and `y.iterate m` agree, to allow for extra computation steps taken by
+either -/
+
+theorem StepAgrees.isLeft_iff {R} {s₁ : σ₁ ⊕ α} {s₂ : σ₂ ⊕ α} (h : StepAgrees R s₁ s₂) :
+    s₁.isLeft ↔ s₂.isLeft := by
+  cases h <;> simp
+
+theorem StepAgrees.isRight_iff {R} {s₁ : σ₁ ⊕ α} {s₂ : σ₂ ⊕ α} (h : StepAgrees R s₁ s₂) :
+    s₁.isRight ↔ s₂.isRight := by
+  cases h <;> simp
+
+theorem StepAgrees.eq_of_inr {R : σ₁ → σ₂ → Prop} {a : α} {y : σ₂ ⊕ α} :
+    StepAgrees R (.inr a) y → y = .inr a := by
+  rintro ⟨⟩; rfl
+
+-- theorem minimumStepsToTerminate_eq_of_bisim {x y : CoroutineM}
+
+#check run
+
+theorem of_bisim {x y : CoroutineM α} (h : ∃ R, IsBisimulation R ∧ R x.state y.state) :
+    x ≈ y := by
+  rcases h with ⟨R, bisim, state⟩
+  by_cases h : x.Terminates
+  · have iterate_agrees := iterate_agrees_of_bisim bisim state (x.minimumStepsToTerminate h)
+    apply Equiv.terminates h ?y_terminates
+    · rw [iterate_minimumStepsToTerminate] at iterate_agrees
+      rw [run_eq_of_iterate_eq_inr iterate_agrees.eq_of_inr]
+    · use (x.minimumStepsToTerminate h)
+      simp [← iterate_agrees.isRight_iff, iterate_minimumStepsToTerminate]
+  · apply Equiv.non_terminates h
+    simp_all only [Terminates, not_exists, Bool.not_eq_true, Sum.isRight_eq_false]
+    intro n
+    rw [← iterate_agrees_of_bisim bisim state n |>.isLeft_iff]
+    exact h n
+
+
+
+end OfBisim
+
 #exit
 
 /-- If a coroutine `x` terminates, yielding some value `a`, then `x` is equivalent to `pure a` -/

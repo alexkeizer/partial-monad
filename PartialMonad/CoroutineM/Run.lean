@@ -76,7 +76,7 @@ theorem minimumStepsToTerminate_pos (x : CoroutineM α) (h : x.Terminates) :
       simp [hx]
 
 /-- Iterating for the minimum steps to terminate does in fact yield a result -/
-theorem iterate_minimumStepsToTerminate (x : CoroutineM α) (h : x.Terminates) :
+theorem iterate_minimumStepsToTerminate_isRight (x : CoroutineM α) (h : x.Terminates) :
     (x.iterate <| x.minimumStepsToTerminate h).isRight := by
   unfold CoroutineM.minimumStepsToTerminate
   have n_spec := h.choose_spec
@@ -138,12 +138,12 @@ theorem minimumStepsToTerminate_eq_succ_of_next {x : CoroutineM α} {state' : x.
     x.minimumStepsToTerminate h_terminates
     = {x with state := state'}.minimumStepsToTerminate h_terminates' + 1 := by
   have isLeft_pred_n := iterate_minimumStepsToTerminate_pred x h_terminates
-  have isRight_iterate_x_n := iterate_minimumStepsToTerminate x h_terminates
+  have isRight_iterate_x_n := iterate_minimumStepsToTerminate_isRight x h_terminates
   generalize h : x.minimumStepsToTerminate h_terminates = n at *
 
 
   have isLeft_pred_n' := iterate_minimumStepsToTerminate_pred _ h_terminates'
-  have isRight_iterate_x'_n' := iterate_minimumStepsToTerminate _ h_terminates'
+  have isRight_iterate_x'_n' := iterate_minimumStepsToTerminate_isRight _ h_terminates'
   generalize CoroutineM.minimumStepsToTerminate _ h_terminates' = n' at *
 
   cases n
@@ -190,6 +190,31 @@ def run (x : CoroutineM α) (h_terminates : x.Terminates) : α :=
 termination_by x.minimumStepsToTerminate h_terminates
 
 #print axioms run -- `sorry`-free, yay!
+
+theorem iterate_minimumStepsToTerminate {x : CoroutineM α} (h) :
+    x.iterate (x.minimumStepsToTerminate h) = .inr (x.run h) := by
+  have n_spec := iterate_minimumStepsToTerminate_isRight x h
+  generalize x.minimumStepsToTerminate h = n at *
+  rcases x with ⟨x, state⟩
+  induction n generalizing state
+  case zero => simp at n_spec
+  case succ n ih =>
+    unfold run
+    split
+    next state' h_state' =>
+      simp only at h_state'
+      simp only [iterate, h_state'] at n_spec ⊢
+      apply ih _ _ n_spec
+    next a =>
+      simp_all [iterate]
+
+/-- If we can show that iterating a coroutine for some number of steps yiels a result `a`, then
+running that coroutine until completion yields that same result -/
+theorem run_eq_of_iterate_eq_inr {x : CoroutineM α} {n} {a} (h : x.iterate n = .inr a)
+    (x_terminates : x.Terminates := ⟨n, by simp [h]⟩) :
+    x.run x_terminates = a := by
+  sorry
+
 
 /-! Show that various constructions terminate (assuming that it's arguments terminate) -/
 section Terminates
