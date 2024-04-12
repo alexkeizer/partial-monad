@@ -94,8 +94,6 @@ theorem StepAgrees.eq_of_inr {R : σ₁ → σ₂ → Prop} {a : α} {y : σ₂ 
     StepAgrees R (.inr a) y → y = .inr a := by
   rintro ⟨⟩; rfl
 
--- theorem minimumStepsToTerminate_eq_of_bisim {x y : CoroutineM}
-
 #check run
 
 theorem of_bisim {x y : CoroutineM α} (h : ∃ R, IsBisimulation R ∧ R x.state y.state) :

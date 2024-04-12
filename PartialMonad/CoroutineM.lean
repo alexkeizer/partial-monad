@@ -21,6 +21,20 @@ structure CoroutineM (α : Type u) extends CoroutineM.StateMachine α where
 
 namespace CoroutineM
 
+/-- We generally identify a state machine with its transition function;
+with the following `CoeFun` instance, we can use `c : StateMachine α` wherever a function of type
+`c.σ → c.σ ⊕ α` is expected, and Lean will coerce it automatically -/
+instance : CoeFun (StateMachine α) (fun c => c.σ → c.σ ⊕ α) where
+  coe c := c.next
+
+/-- Establish the coerced form as the simp-normal form  -/
+@[simp] theorem next_eq (c : StateMachine α) : c.next = c := rfl
+
+/-!
+TODO: figure out how this simp normal form interacts with `x : CoroutineM α`, would the normal form
+now be `x.toStateMachine` over `x.next`? That is a bit ugly.
+-/
+
 /-- Runs the coroutine for a single step -/
 def nextState (x : CoroutineM α) : (CoroutineM α) ⊕ α :=
   (x.next x.state).map (fun state => {x with state}) id
