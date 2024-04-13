@@ -63,18 +63,27 @@ theorem iterate_isLeft_of_le_minimumStepsToTerminate (c : StateMachine α) (s : 
 section Lemmas
 
 @[simp] theorem iterate_zero (c : StateMachine α) (s) : c.iterate s 0 = .inl s := rfl
+@[simp] theorem iterate_one (c : StateMachine α) (s) : c.iterate s 1 = c s := by
+  unfold iterate; cases c s <;> rfl
+
+theorem iterate_add (c : StateMachine α) (s : c.σ) (n m : Nat) :
+    c.iterate s (n+m) = match (c.iterate s n) with
+      | .inl s => (c.iterate s m)
+      | .inr a => .inr a := by
+  induction n generalizing s
+  case zero => simp
+  case succ n ih =>
+    have : n.succ + m = (n + m) + 1 := by ac_rfl
+    rw [this, iterate]
+    cases hx : c.next s
+    case inl s' => simp only; rw [ih s', iterate, hx]
+    case inr _  => simp [iterate, hx]
+
 theorem iterate_succ (c : StateMachine α) (s : c.σ) (n : Nat) :
     c.iterate s (n+1) = match (c.iterate s n) with
       | .inl s => c s
       | .inr a => .inr a := by
-  induction n generalizing s
-  case zero =>
-    simp only [iterate]; cases c s <;> rfl
-  case succ n ih =>
-    rw [iterate]
-    cases hx : c.next s
-    case inl s' => simp only; rw [ih s', iterate, hx]
-    case inr _  => simp [iterate, hx]
+  simp [iterate_add]
 
 theorem iterate_succ_of_next_eq_inl {c : StateMachine α} {state state'}
     (h : c.next state = .inl state') :
@@ -212,5 +221,6 @@ def ReachableStates (x : CoroutineM α) : Set x.σ :=
   Exists.intro 0 rfl
 
 end Reachable
+
 
 end CoroutineM
