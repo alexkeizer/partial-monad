@@ -101,7 +101,7 @@ lemma AgreesUpTo.rfl {c : StateMachine α} {R} (h : ∀ a, R a a) (s : c.σ) : A
   exact ⟨0, 0, ImmediatelyAgreesUpTo.rfl h ..⟩
 
 /-- If `Q` is implied by `R`, then `AgreesUpTo Q` is implied by `AgreesUpTo R`  -/
-theorem AgreesUpTo.of_imp {c₁ c₂ : StateMachine α} {R Q : c₁.σ → c₂.σ → Prop} :
+lemma AgreesUpTo.of_imp {c₁ c₂ : StateMachine α} {R Q : c₁.σ → c₂.σ → Prop} :
     (∀ s₁ s₂, R s₁ s₂ → Q s₁ s₂) → (∀ {s₁ s₂}, AgreesUpTo R s₁ s₂ → AgreesUpTo Q s₁ s₂) := by
   rintro h_imp s₁ s₂ ⟨n, m, h_agrees_R⟩
   use n, m
@@ -114,26 +114,132 @@ theorem AgreesUpTo.of_imp {c₁ c₂ : StateMachine α} {R Q : c₁.σ → c₂.
 def Bisimulation.Eq (c : StateMachine σ) : Bisimulation c c :=
   ⟨(· = ·), by simp only [IsBisimulation, forall_eq', implies_true, AgreesUpTo.rfl]⟩
 
+open StateMachine in
 /-- The transitive closure of two bisimulations `R₁` and `R₂` is also a bisimulation -/
 def Bisimulation.trans (R₁ : Bisimulation c₁ c₂) (R₂ : Bisimulation c₂ c₃) : Bisimulation c₁ c₃ :=
-  ⟨fun s₁ s₃ => ∃ s₂, R₁ s₁ s₂ ∧ R₂ s₂ s₃, by
+  let R := fun s₁ s₃ =>
+    ∃ s₂ s₂' n,
+      (c₂.iterate s₂ n = .inl s₂' ∨ c₂.iterate s₂' n = .inl s₂)
+      ∧ R₁ s₁ s₂ ∧ R₂ s₂' s₃
+  ⟨R, by
     intro s₁ s₃
     rcases R₁ with ⟨R₁, is_bisim₁⟩
     rcases R₂ with ⟨R₂, is_bisim₂⟩
     simp only [forall_exists_index, and_imp]
-    intro s₂ hR₁ hR₂
+    rintro s₂ t₂ m_st s₂_eq_iter_s₂ hR₁ hR₂
 
-    have ⟨n₁, m₁, agree₁⟩ := is_bisim₁ _ _ hR₁
-    have ⟨n₂, m₂, agree₂⟩ := is_bisim₂ _ _ hR₂
+    have ⟨n_s₁, n_s₂, agree₁⟩ := is_bisim₁ _ _ hR₁
+    have ⟨n_t₂, n_s₃, agree₂⟩ := is_bisim₂ _ _ hR₂
+    use n_s₁, n_s₃
 
-    sorry
-    -- rcases x.next s₁ with s₁'|a₁
-    -- <;> rcases y.next s₂ with s₂'|a₂
-    -- <;> rcases z.next s₃ with s₃'|a₃
-    -- <;> rintro ⟨next₂⟩ ⟨next₁⟩
-    -- <;> constructor
-    -- exact ⟨_, next₁, next₂⟩
+    suffices
+      (∃ a, c₁.iterate s₁ (n_s₁ + 1) = .inr a ∧ c₃.iterate s₃ (n_s₃ + 1) = .inr a)
+      ∨ (∃ s₁' s₃', c₁.iterate s₁ (n_s₁ + 1) = .inl s₁' ∧ c₃.iterate s₃ (n_s₃ + 1) = .inl s₃')
+    by
+      rcases this with ⟨a, h₁, h₃⟩|⟨s₁', s₃', h₁, h₃⟩
+      · simp only [h₁, h₃]; constructor
+      · simp only [h₁, h₃] at *; constructor;
+        rcases s₂_eq_iter_s₂ with h₂|h₂
+        case' inl =>
+          generalize n_s₂ + 1 = a at *
+          generalize n_t₂ + 1 = b at *
+
+        · have it_zero (s) : Sum.inl s = c₂.iterate s 0 := rfl
+          have : c₂.iterate t₂ b = c₂.iterate t₂ (0 + b) := by ac_rfl
+          conv_rhs at this =>
+            rw [iterate_add, ←it_zero, ←h₂, ←iterate_add]
+          simp [this] at *
+
+          rcases h_iter_s₂_m₁ : c₂.iterate s₂ (a) with u₁|_
+          <;> cases (h_iter_s₂_m₁ ▸ agree₁)
+          rcases h_iter_s₂_n₂ : c₂.iterate s₂ (m_st + b) with u₂|_
+          <;> cases (h_iter_s₂_n₂ ▸ agree₂)
+
+          obtain ⟨m_tt, h_st'⟩ : ∃ n, c₂.iterate u₁ n = .inl u₂ ∨ c₂.iterate u₂ n = .inl u₁ := by
+            rcases lt_or_le (a) (m_st + b) with lt|le
+            · obtain ⟨k, hk⟩ := Nat.exists_eq_add_of_lt lt
+              use k+1
+              rw [hk, show a + k + 1 = (a) + _ by ac_rfl,
+                iterate_add _ _ (a), h_iter_s₂_m₁] at h_iter_s₂_n₂
+              exact Or.inl h_iter_s₂_n₂
+            · obtain ⟨k, hk⟩ := Nat.exists_eq_add_of_le le
+              use k
+              rw [hk, iterate_add _ _ (m_st + b), h_iter_s₂_n₂] at h_iter_s₂_m₁
+              exact Or.inr h_iter_s₂_m₁
+
+          exact ⟨u₁, u₂, m_tt, h_st', ‹R₁ _ u₁›, ‹R₂ u₂ _›⟩
+
+        · have it_zero (s) : Sum.inl s = c₂.iterate s 0 := rfl
+          have : c₂.iterate s₂ (n_s₂ + 1) = c₂.iterate s₂ (0 + (n_s₂ + 1)) := by ac_rfl
+          conv_rhs at this =>
+            rw [iterate_add, ←it_zero, ←h₂, ←iterate_add]
+          simp [this] at *
+
+          rcases h_iter_t₂_₁ : c₂.iterate t₂ _ with u₁|_
+          <;> cases (h_iter_t₂_₁ ▸ agree₁)
+          rcases h_iter_t₂_₂ : c₂.iterate t₂ _ with u₂|_
+          <;> cases (h_iter_t₂_₂ ▸ agree₂)
+
+          obtain ⟨m_tt, h_st'⟩ : ∃ n, c₂.iterate u₁ n = .inl u₂ ∨ c₂.iterate u₂ n = .inl u₁ := by
+            rcases lt_or_le (n_t₂ + 1) (m_st + (n_s₂ + 1)) with lt|le
+            · obtain ⟨k, hk⟩ := Nat.exists_eq_add_of_lt lt
+              use k+1
+              rw [hk, show n_t₂ + 1 + k + 1 = (n_t₂ + 1) + _ by ac_rfl,
+                iterate_add _ _ (n_t₂ + 1), h_iter_t₂_₂] at h_iter_t₂_₁
+              exact Or.inr h_iter_t₂_₁
+            · obtain ⟨k, hk⟩ := Nat.exists_eq_add_of_le le
+              use k
+              rw [hk, iterate_add _ _ (m_st + (n_s₂ + 1)), h_iter_t₂_₁] at h_iter_t₂_₂
+              exact Or.inl h_iter_t₂_₂
+
+          exact ⟨u₁, u₂, m_tt, h_st', ‹R₁ _ u₁›, ‹R₂ u₂ _›⟩
+
+    rcases h_iter₁ : c₁.iterate s₁ (n_s₁ + 1) with s₁'|a₁
+      <;> rcases h_iter₃ : c₃.iterate s₃ (n_s₃ + 1) with s₃'|a₃
+      <;> simp [h_iter₁, h_iter₃] at agree₁ agree₂
+      <;> (try rcases agree₁ with ⟨agree₁⟩)
+      <;> (try rcases agree₂ with ⟨agree₂⟩)
+      <;> simp
+
+    stop
+
+    rcases Nat.lt_trichotomy n₂ m₁ with h_lt|rfl|h_gt
+    case' inl =>
+      obtain ⟨l, rfl⟩ := Nat.exists_eq_add_of_lt h_lt; clear h_lt
+      rw [show n₂ + l + 2  = (n₂ + 1) + (l + 1) by ac_rfl, iterate_add _ _ (n₂ + 1)] at agree₁
+      rcases h_iter₂ : c₂.iterate s₂ (n₂ + 1) with s₂'|a₂
+      <;> simp [h_iter₂] at agree₁ agree₂
+    case' inr.inr =>
+      obtain ⟨l, rfl⟩ := Nat.exists_eq_add_of_lt h_gt; clear h_gt
+      rw [show m₁ + l + 2  = (m₁ + 1) + (l + 1) by ac_rfl, iterate_add _ _ (m₁ + 1)] at agree₂
+      rcases h_iter₂ : c₂.iterate s₂' (m₁ + 1) with t₁|a₂
+      <;> simp [h_iter₂] at agree₁ agree₂
+
+    all_goals
+
+      -- <;> (
+      --   first
+      --   | rcases h_iter₂ : c₂.iterate s₂ (n₂ + 1) with s₂'|a₂
+      --     <;> simp [h_iter₂] at agree₁ agree₂
+      --     <;> rcases agree₂ with ⟨hR⟩
+      --     sorry
+      --   | sorry
+      -- )
+    · rcases h_iter₂ : c₂.iterate s₂ (m₁ + 1) with s₂'|a₂
+      <;> simp [h_iter₂] at agree₁ agree₂
+      <;> rcases agree₂ with ⟨hR⟩
+      rcases h_iter₂' : c₂.iterate t₁ (l+1) with t₂|a₂'
+      <;> simp [h_iter₂'] at agree₂
+      <;> cases agree₂
+      apply Or.inr
+      suffices R s₁' s₃' by simpa
+      use s₂
+      use t₁
+      simp_all
+
+    all_goals sorry
   ⟩
+
 
 /-- The inverse `R⁻¹ := { (y, x) | x R y }` of a bisimulation `R` is still a bisimulation -/
 def Bisimulation.inv (R : Bisimulation c₁ c₂) : Bisimulation c₂ c₁ :=
@@ -234,35 +340,6 @@ theorem bisim_of_iterate_eq_inr {n m}
   use n, m
   simpa [iterate_succ, h₁, h₂] using .inr
 
-
--- /-- If states `s₁` and `s₂` are bisimilar, according to some bisimulation `R`, then for any number
--- of steps that we want to iterate either state, we can continue iteration for some more steps and
--- get a pair of results that immediately agree up to `R`.
--- That it, bisimulation is (weakly) preserved by the state machine transition function -/
--- theorem bisim_of_iterate_of_bisim {R : Bisimulation _ _} (h_bisim : R s₁ s₂) :
---     ∀ n k, ∃ m l, ImmediatelyAgreesUpTo R (c₁.iterate s₁ (n+m)) (c₂.iterate s₂ (k+l)) := by
---   intro n k
---   rcases R with ⟨R, R_is_bisim⟩
---   simp only at *
---   induction n using Nat.strongInductionOn generalizing k s₁ s₂
---   case ind n ih_n =>
---     cases n
---     case zero => sorry
---     case succ n =>
---       cases h_iter₁ : c₁.iterate s₁ n.succ
---       case inl s₁' =>
---         simp [iterate_add _ _ n.succ, h_iter₁]
---         conv in (iterate ..) => rw [show m = 0 + m by simp]
---         apply ih_n
---         · simp
---         ·
-
---       sorry
-
-  -- cases h_iter₁ : c₁.iterate s₁ n
-  -- <;> cases h_iter₂ : c₂.iterate s₂ k
-  -- case inl.inl =>
-
 /-- Any states that agree up-to a bisimulation are in fact bisimilar -/
 lemma bisim_of_agrees {R : Bisimulation c₁ c₂} :
     AgreesUpTo R s₁ s₂ → (s₁ ~ₛ s₂) := by
@@ -306,10 +383,10 @@ lemma bisim_iterate (h_iterate : c.iterate s n = .inl s') :
       · exact ih h_iterate_eq_t
       · exact bisim_next h_iterate
 
-/-- Any pair of states reachable from a pair of bisimilar states (in a possibly different number of
-steps for either state machine) is again bisimilar.
-Therefore, bisimulation is preserved by (arbitrary!) iteration
- -/
+/-- Any pair of states reachable from a pair of bisimilar states
+(in a possibly different number of steps for either state machine)
+is again bisimilar.
+Therefore, bisimulation is preserved by (arbitrary!) iteration -/
 lemma bisim_iterate_iterate_of_bisim (h_bisim : s₁ ~ₛ s₂) {n m : Nat}
     (h_iterate₁ : c₁.iterate s₁ n = .inl s₁') (h_iterate₂ : c₂.iterate s₂ m = .inl s₂') :
     s₁' ~ₛ s₂' := by
